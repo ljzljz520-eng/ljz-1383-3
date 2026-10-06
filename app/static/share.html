@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>跑者年报分享</title>
+<style>
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,"PingFang SC",sans-serif;background:#f6f8fa;color:#1f2937}
+header{background:#2563eb;color:#fff;padding:16px 20px}
+main{max-width:960px;margin:0 auto;padding:18px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.run{border:1px solid #eef0f2;border-radius:8px;padding:10px}
+.run h3{margin:0 0 4px;font-size:14px}.muted{color:#6b7280;font-size:12px}
+.run svg,.run img{width:100%;height:auto;border-radius:6px;background:#f6f8fa}
+a{color:#2563eb}
+.badge{font-size:11px;background:#ecfdf5;color:#047857;border-radius:999px;padding:2px 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;border-bottom:1px solid #f0f1f3;text-align:left}
+</style>
+</head>
+<body>
+<header>🏃 <span id="year"></span> 跑者年报 · 分享页
+  <span class="badge" style="background:rgba(255,255,255,.2);color:#fff">住址附近轨迹已隐藏</span></header>
+<main>
+  <div class="card" id="privacy-note">
+    本页所有轨迹、缩略图、GPX 下载与聚合入口均已删除隐私区内的点；
+    起点/终点原始坐标不提供，聚合位置按约 5km 网格取整。伤病记录不包含在分享中。
+  </div>
+  <div class="card"><h2>月度故事</h2><div id="stories"></div></div>
+  <div class="card"><h2>活动（缩略图仅含像素，不含坐标文本）</h2><div class="grid" id="runs"></div></div>
+  <div class="card"><h2>活动范围（聚合入口）</h2><div id="agg"></div></div>
+</main>
+<script>
+const token=location.pathname.split('/')[2];
+function fmtKm(m){return (m/1000).toFixed(2)}
+fetch(`/api/share/${token}/payload`).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{
+  $('#year').textContent=j.year;
+  document.title=j.year+' 跑者年报分享';
+  $('#stories').innerHTML=j.stories.length?j.stories.map(s=>
+    `<p><b>${s.title||s.month_key||''}</b><br><span class="muted">${s.body}</span></p>`).join('')
+    :'<span class="muted">暂无故事</span>';
+  $('#runs').innerHTML=j.activities.map(a=>`
+    <div class="run">
+      <h3>#${a.id} ${a.title||'跑步'} ${a.kind==='race'?'🏁':''}</h3>
+      <div class="muted">${a.start_time_utc.slice(0,10)} · ${fmtKm(a.distance_m)} km
+        · 距离来源：${a.distance_origin==='user_confirmed'?'用户确认':'设备估算'}</div>
+      <a href="/s/${token}/track/${a.id}/thumb.svg" target="_blank">
+        <img src="/s/${token}/track/${a.id}/thumb.svg" alt="track thumbnail"/></a>
+      <div><a href="/s/${token}/track/${a.id}/download.gpx">下载脱敏 GPX</a></div>
+    </div>`).join('')||'<span class="muted">本年无可公开活动</span>';
+  return fetch(`/s/${token}/aggregate`);
+}).then(r=>r.json()).then(a=>{
+  $('#agg').innerHTML=a.available
+    ?`<div class="muted">${a.note}</div>
+      <table><tr><th>网格单元（lat, lon，约5km）</th></tr>
+      ${a.grid_cells.map(c=>`<tr><td>${c[0]}, ${c[1]}</td></tr>`).join('')}</table>
+      <div class="muted">网格边界：${a.bbox.join(', ')}</div>`
+    :`<span class="muted">${a.reason||'聚合不可用（会暴露住址）'}</span>`;
+}).catch(()=>{document.querySelector('main').innerHTML='<div class="card">分享链接无效或已失效。</div>'});
+const $=s=>document.querySelector(s);
+</script>
+</body>
+</html>

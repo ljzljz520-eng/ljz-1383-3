@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>跑者年报</title>
+<style>
+:root{--blue:#2563eb;--bg:#f6f8fa;--ink:#1f2937;--muted:#6b7280;--ok:#059669;--warn:#d97706;--bad:#dc2626;}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--blue);color:#fff;padding:14px 20px}header h1{margin:0;font-size:18px}
+nav{display:flex;gap:4px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e5e7eb;padding:0 12px;position:sticky;top:0;z-index:5}
+nav button{border:0;background:none;padding:12px 14px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+nav button.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+main{max-width:1080px;margin:0 auto;padding:18px}
+.tab{display:none}.tab.active{display:block}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 12px}h3{font-size:14px;margin:14px 0 8px}
+label{font-size:12px;color:var(--muted);display:block;margin:8px 0 3px}
+input,select,textarea{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:7px;font-size:14px}
+button.btn{background:var(--blue);color:#fff;border:0;border-radius:7px;padding:8px 14px;font-size:14px;cursor:pointer;margin-top:10px}
+button.ghost{background:#fff;color:var(--ink);border:1px solid #d1d5db}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #f0f1f3;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;margin-right:4px}
+.tag.device{background:#eef2ff;color:#4338ca}.tag.confirmed{background:#ecfdf5;color:#047857}
+.tag.race{background:#fef3c7;color:#92400e}.tag.hidden{background:#fee2e2;color:#991b1b}
+.muted{color:var(--muted);font-size:12px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.bar-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px}
+.bar-row .lab{width:44px;color:var(--muted)}.bar-track{flex:1;background:#eef2ff;border-radius:5px;height:16px;position:relative}
+.bar-fill{background:var(--blue);height:100%;border-radius:5px}.bar-fill.race{background:#d97706}
+.bar-fill.confirmed{background:#059669}.bar-row .val{width:120px;text-align:right}
+.chart-svg{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;background:#fff}
+.pill{font-size:12px;background:#f3f4f6;border-radius:999px;padding:3px 10px;display:inline-block;margin:2px}
+.toast{position:fixed;bottom:18px;right:18px;background:#111827;color:#fff;padding:10px 14px;border-radius:8px;font-size:13px;opacity:0;transition:.25s}
+.toast.show{opacity:.95}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:720px){.grid2{grid-template-columns:1fr}}
+a{color:var(--blue)}
+</style>
+</head>
+<body>
+<header><h1>🏃 跑者年报 · 训练导入 / 身份去重 / 隐私分享</h1></header>
+<nav id="nav">
+  <button data-tab="import" class="active">导入</button>
+  <button data-tab="months">月份</button>
+  <button data-tab="races">比赛</button>
+  <button data-tab="stories">个人故事</button>
+  <button data-tab="dedup">去重与拆分</button>
+  <button data-tab="privacy">隐私与分享</button>
+  <button data-tab="report">年度报告</button>
+  <button data-tab="method">统计口径</button>
+</nav>
+<main>
+
+<section id="tab-import" class="tab active">
+  <div class="card">
+    <h2>导入训练文件（GPX / TCX）</h2>
+    <div class="grid2">
+      <div><label>文件</label><input type="file" id="file" accept=".gpx,.tcx"/></div>
+      <div><label>来源设备</label><select id="source">
+        <option value="watch">手表 watch</option>
+        <option value="phone">手机 phone</option>
+        <option value="strava">Strava 导出</option></select></div>
+      <div><label>来源外部ID（同设备同一活动相同，用于判重，可留空）</label><input id="extid" placeholder="例如 garmin:12345"/></div>
+      <div><label>类型 / 标题</label><input id="title" placeholder="晨跑 / 上海马拉松"/></div>
+    </div>
+    <button class="btn" onclick="doImport()">上传并规范化</button>
+    <div id="import-result" class="muted" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <h2>活动列表</h2>
+    <table id="act-table"><thead><tr>
+      <th>ID</th><th>标题/类型</th><th>开始(UTC)</th><th>距离</th><th>移动时间</th>
+      <th>跳点</th><th>距离来源</th><th>状态</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card" id="detail-card" style="display:none">
+    <h2>活动详情 <span id="d-id"></span></h2>
+    <div id="detail"></div>
+    <h3>距离手工订正（新 user_confirmed 版本，保留原值）</h3>
+    <div class="grid2">
+      <input id="corr-dist" type="number" step="0.01" placeholder="订正后距离（米）"/>
+      <input id="corr-reason" placeholder="原因，如 GPS 隧道丢点按路标里程订正"/>
+    </div>
+    <button class="btn" onclick="doCorrect()">提交订正</button>
+    <div class="muted" style="margin-top:8px">⚠ 本网站仅记录数据，<b>不据此提供训练建议或伤病治疗建议</b>。</div>
+  </div>
+</section>
+
+<section id="tab-months" class="tab">
+  <div class="card"><h2>月度训练（比赛成绩不计入训练里程）</h2><div id="months"></div></div>
+</section>
+
+<section id="tab-races" class="tab">
+  <div class="card">
+    <h2>登记比赛成绩</h2>
+    <div class="grid2">
+      <div><label>活动ID</label><input id="race-act" type="number"/></div>
+      <div><label>比赛名</label><input id="race-name"/></div>
+      <div><label>芯片时间(秒)</label><input id="race-chip" type="number"/></div>
+      <div><label>枪声时间(秒)</label><input id="race-gun" type="number"/></div>
+      <div><label>官方距离(米)</label><input id="race-dist" type="number"/></div>
+      <div><label>总名次</label><input id="race-rank" type="number"/></div>
+    </div>
+    <button class="btn" onclick="addRace()">保存成绩</button>
+  </div>
+  <div class="card"><h2>比赛记录</h2><div id="race-list"></div></div>
+</section>
+
+<section id="tab-stories" class="tab">
+  <div class="card">
+    <h2>个人故事</h2>
+    <div class="grid2">
+      <div><label>关联活动ID（可空）</label><input id="st-act" type="number"/></div>
+      <div><label>月份 yyyy-mm（可空）</label><input id="st-month" placeholder="2024-03"/></div>
+    </div>
+    <label>标题</label><input id="st-title"/>
+    <label>故事正文</label><textarea id="st-body" rows="4"></textarea>
+    <button class="btn" onclick="addStory()">保存故事</button>
+    <h3>伤病记录（私密）</h3>
+    <div class="grid2">
+      <div><label>关联活动ID（可空）</label><input id="inj-act" type="number"/></div>
+      <div><label>部位</label><input id="inj-part" placeholder="膝盖/跟腱…"/></div>
+    </div>
+    <label>描述</label><textarea id="inj-note" rows="2"></textarea>
+    <button class="btn ghost" onclick="addInjury()">仅私密保存（永不进入分享/年报）</button>
+    <div id="stories"></div>
+  </div>
+</section>
+
+<section id="tab-dedup" class="tab">
+  <div class="card">
+    <h2>身份与去重决定</h2>
+    <p class="muted">手表与手机同一次跑步自动判重（来源ID或时空双重相似），不会双算；
+      时间接近但轨迹不同、或轨迹相近但时间不重叠的相邻两段训练保留独立。人工拆分永久保留。</p>
+    <div class="grid2">
+      <div><label>活动 A</label><input id="lk-a" type="number"/></div>
+      <div><label>活动 B</label><input id="lk-b" type="number"/></div>
+    </div>
+    <button class="btn" onclick="markDup()">确认重复（合并身份）</button>
+    <button class="btn ghost" onclick="markSplit()">人工拆分（恢复独立）</button>
+    <div id="links" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<section id="tab-privacy" class="tab">
+  <div class="card">
+    <h2>住址隐私区</h2>
+    <div class="grid2">
+      <div><label>纬度</label><input id="z-lat" type="number" step="1e-6"/></div>
+      <div><label>经度</label><input id="z-lon" type="number" step="1e-6"/></div>
+      <div><label>半径(米，默认200)</label><input id="z-r" type="number" value="200"/></div>
+      <div><label>名称</label><input id="z-label" value="home"/></div>
+    </div>
+    <button class="btn" onclick="addZone()">添加隐私区</button>
+    <p class="muted">分享页面的轨迹、缩略图、GPX 下载、聚合入口共用同一裁剪/网格规则。</p>
+  </div>
+  <div class="card">
+    <h2>创建分享页</h2>
+    <div class="grid2"><input id="sh-year" type="number" placeholder="年份，如 2024"/>
+      <button class="btn" onclick="createShare()">生成链接</button></div>
+    <div id="sh-link"></div>
+  </div>
+</section>
+
+<section id="tab-report" class="tab">
+  <div class="card">
+    <h2>生成年度报告</h2>
+    <div class="grid2">
+      <div><label>年份</label><input id="rp-year" type="number" value="2024"/></div>
+      <div><label>统计规则版本</label><select id="rp-rules">
+        <option value="v2-2024">v2-2024（当地时区归属日，当前）</option>
+        <option value="v1-2023">v1-2023（UTC 归属日，历史规则）</option></select></div>
+    </div>
+    <button class="btn" onclick="genReport(true)">生成（快照）</button>
+    <button class="btn ghost" onclick="genReport(false)">用所选规则重新生成</button>
+    <div id="report-meta" class="muted" style="margin-top:8px"></div>
+  </div>
+  <div class="card"><h2>月度跑量（训练）与比赛</h2><div id="rp-chart"></div></div>
+  <div class="card"><h2>设备估算 vs 用户确认（同一数据范围）</h2><div id="rp-origin"></div></div>
+  <div class="card"><h2>比赛成绩（独立于训练统计）</h2><div id="rp-races"></div></div>
+</section>
+
+<section id="tab-method" class="tab"><div class="card"><h2>公开统计口径</h2><pre id="method" style="white-space:pre-wrap;font-size:12px"></pre></div></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+function toast(m, bad){const t=$('#toast');t.textContent=m;t.className='toast show'+(bad?' bad':'');setTimeout(()=>t.className='toast',2600)}
+async function api(path, opts={}){
+  const r = await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
+  if(!r.ok){throw new Error((await r.text())||r.status)}
+  return r.status===204?null:r.json();
+}
+function fmtKm(m){return (m/1000).toFixed(2)}
+function fmtDur(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+'h ':'')+m+'min'}
+function switchTab(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+name));
+  if(name==='months')loadMonths();if(name==='races')loadRaces();if(name==='stories')loadStories();
+  if(name==='dedup')loadLinks();if(name==='method')loadMethod();}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+
+async function doImport(){
+  const f=$('#file').files[0];if(!f)return toast('请选择文件',true);
+  const fd=new FormData();
+  fd.append('file',f);fd.append('source',$('#source').value);
+  if($('#extid').value)fd.append('external_id',$('#extid').value);
+  if($('#title').value)fd.append('title',$('#title').value);
+  const r=await fetch('/api/import',{method:'POST',body:fd});
+  if(!r.ok){toast('导入失败: '+(await r.text()),true);return}
+  const j=await r.json();
+  const m=j.match;
+  $('#import-result').innerHTML=`活动ID <b>${j.activity_id}</b> · 距离 ${fmtKm(j.stats.distance_m)} km ·
+    移动 ${fmtDur(j.stats.moving_s)} · 剔除跳点 <b>${j.stats.spikes_removed}</b><br>
+    与最近活动 #${m?m.other_activity_id:'-'}：${m?(m.duplicate?'<span class="bad">判定重复（'+m.reason+'）</span>':'<span class="ok">保留独立（'+m.reason+'）</span>'):'无其他活动'}
+    <div class="muted">端点 ${m?m.metrics.endpoint_m:'-'} m · Hausdorff ${m?m.metrics.hausdorff_m:'-'} m · 时间重叠 ${m?m.metrics.overlap_ratio:'-'} · 起点差 ${m?m.metrics.start_gap_s:'-'}s</div>`;
+  toast(m&&m.duplicate?'已自动判重，不双算':'导入成功');loadActivities();
+}
+
+async function loadActivities(){
+  const rows=await api('/api/activities');
+  const tb=$('#act-table tbody');tb.innerHTML='';
+  const hidden=new Set((await api('/api/links')).filter(l=>l.decision==='confirmed_duplicate').flatMap(l=>[l.activity_a,l.activity_b]));
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${r.id}</td>
+      <td>${r.title||'(未命名)'} ${r.kind==='race'?'<span class="tag race">比赛</span>':''}</td>
+      <td>${r.start_time_utc.replace('T',' ').slice(0,16)}<div class="muted">UTC偏移 ${r.tz_offset_min}min</div></td>
+      <td>${fmtKm(r.distance_m)} km</td><td>${fmtDur(r.moving_s)}</td>
+      <td>${r.spikes_removed}</td>
+      <td><span class="tag ${r.distance_origin==='user_confirmed'?'confirmed':'device'}">${r.distance_origin==='user_confirmed'?'用户确认':'设备估算'}</span></td>
+      <td>${r.canonical?'<span class="ok">计入</span>':'<span class="tag hidden">已判重隐藏</span>'}</td>
+      <td><button class="btn ghost" onclick="showDetail(${r.id})">详情</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function showDetail(id){
+  const d=await api('/api/activities/'+id);
+  $('#detail-card').style.display='block';$('#d-id').textContent='#'+id;
+  const src=d.sources.map(s=>`<span class="pill">${s.source}:${s.external_id||s.fingerprint.slice(0,8)} (${s.filename})</span>`).join('');
+  const corr=d.corrections.map(c=>`<tr><td>${c.field}</td><td>${fmtKm(c.old_value)}km</td><td>${fmtKm(c.new_value)}km</td>
+    <td><span class="tag ${c.origin==='user_confirmed'?'confirmed':'device'}">${c.origin}</span></td><td>${c.reason||''}</td></tr>`).join('')
+    ||'<tr><td colspan=5 class="muted">无订正</td></tr>';
+  $('#detail').innerHTML=`<div class="muted">来源（同一次跑步可有多个）：</div><div>${src}</div>
+    <table style="margin-top:8px"><thead><tr><th>字段</th><th>原值</th><th>新值</th><th>来源</th><th>原因</th></tr></thead><tbody>${corr}</tbody></table>`;
+  $('#corr-dist').value='';$('#corr-reason').value='';
+  window._detailId=id;
+}
+async function doCorrect(){
+  try{await api(`/api/activities/${window._detailId}/correct`,{method:'POST',
+    body:JSON.stringify({distance_m:+$('#corr-dist').value,reason:$('#corr-reason').value})});
+    toast('订正已保存为 user_confirmed 版本');showDetail(window._detailId);loadActivities();
+  }catch(e){toast(e.message,true)}
+}
+
+async function loadMonths(){
+  const rows=await api('/api/activities');
+  const by={};rows.forEach(r=>{const m=r.start_time_utc.slice(0,7);(by[m]=by[m]||[]).push(r)});
+  const html=Object.keys(by).sort().map(m=>{
+    const tr=by[m].filter(a=>a.kind!=='race'),races=by[m].filter(a=>a.kind==='race');
+    const km=tr.reduce((s,a)=>s+a.distance_m,0), dur=tr.reduce((s,a)=>s+a.moving_s,0);
+    return `<div class="bar-row"><span class="lab">${m}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.min(100,km/20000*100)}%"></span></span>
+      <span class="val">${fmtKm(km)} km · ${tr.length}次 · ${fmtDur(dur)}${races.length?' · 🏁 '+races.length+' 场(不计入)':''}</span></div>`;
+  }).join('')||'<p class="muted">暂无数据</p>';
+  $('#months').innerHTML=html;
+}
+
+async function addRace(){
+  try{await api('/api/race-results',{method:'POST',body:JSON.stringify({
+    activity_id:+$('#race-act').value,race_name:$('#race-name').value,
+    chip_time_s:+$('#race-chip').value||null,gun_time_s:+$('#race-gun').value||null,
+    distance_m:+$('#race-dist').value||null,overall_rank:+$('#race-rank').value||null})});
+    toast('成绩已登记，活动移出训练统计');loadRaces();loadActivities();
+  }catch(e){toast(e.message,true)}
+}
+async function loadRaces(){
+  const acts=await api('/api/activities');
+  $('#race-list').innerHTML='<table><thead><tr><th>ID</th><th>名称</th><th>距离</th><th>芯片时间</th><th>状态</th></tr></thead><tbody>'+
+    acts.filter(a=>a.kind==='race').map(a=>`<tr><td>${a.id}</td><td>${a.title||''}</td><td>${fmtKm(a.distance_m)}km</td><td>${fmtDur(a.moving_s)}</td><td><span class="tag race">成绩</span> 不入训练</td></tr>`).join('')
+    +'</tbody></table>';
+}
+
+async function addStory(){
+  await api('/api/stories',{method:'POST',body:JSON.stringify({
+    activity_id:+$('#st-act').value||null,month_key:$('#st-month').value||null,
+    title:$('#st-title').value,body:$('#st-body').value})});
+  $('#st-body').value='';toast('故事已保存');loadStories();
+}
+async function addInjury(){
+  await api('/api/injuries',{method:'POST',body:JSON.stringify({
+    activity_id:+$('#inj-act').value||null,body_part:$('#inj-part').value,note:$('#inj-note').value})});
+  $('#inj-note').value='';toast('伤病已私密保存');
+}
+async function loadStories(){
+  const ss=await api('/api/stories');
+  $('#stories').innerHTML='<h3>故事列表</h3>'+ss.map(s=>`<div class="pill">${s.month_key||''} ${s.title||''}</div>
+    <div class="muted" style="margin:0 0 8px">${s.body}</div>`).join('')||'';
+}
+
+async function loadLinks(){
+  const ls=await api('/api/links');
+  $('#links').innerHTML='<table><thead><tr><th>A</th><th>B</th><th>决定</th><th>判定者</th></tr></thead><tbody>'+
+    ls.map(l=>`<tr><td>${l.activity_a}</td><td>${l.activity_b}</td>
+      <td>${l.decision==='split'?'<span class="warn">人工拆分（恢复独立）</span>':'<span class="bad">确认重复</span>'}</td>
+      <td>${l.decided_by}</td></tr>`).join('')+'</tbody></table>';
+}
+async function markDup(){try{await api('/api/links/duplicate',{method:'POST',body:JSON.stringify({dup_id:+$('#lk-a').value,keep_id:+$('#lk-b').value})});
+  toast('已合并身份');loadLinks();loadActivities()}catch(e){toast(e.message,true)}}
+async function markSplit(){try{await api('/api/links/split',{method:'POST',body:JSON.stringify({a:+$('#lk-a').value,b:+$('#lk-b').value})});
+  toast('已拆分并恢复，后续自动判重不会再合并');loadLinks();loadActivities()}catch(e){toast(e.message,true)}}
+
+async function addZone(){
+  await api('/api/privacy-zones',{method:'POST',body:JSON.stringify({
+    label:$('#z-label').value,lat:+$('#z-lat').value,lon:+$('#z-lon').value,radius_m:+$('#z-r').value})});
+  toast('隐私区已添加');
+}
+async function createShare(){
+  const j=await api('/api/share',{method:'POST',body:JSON.stringify({year:+$('#sh-year').value})});
+  $('#sh-link').innerHTML=`<p>分享链接：<a href="${j.url}" target="_blank">${location.origin}${j.url}</a></p>
+    <p class="muted">轨迹/缩略图/下载/聚合均已去除隐私区内坐标；伤病字段不会出现。</p>`;
+}
+
+async function genReport(isNew){
+  const path=isNew?'/api/reports/generate':`/api/reports/${$('#rp-year').value}/regenerate`;
+  let j;
+  try{ j=await api(path,{method:'POST',body:JSON.stringify({year:+$('#rp-year').value,rules_version:$('#rp-rules').value})});
+  }catch(e){try{j=await api(`/api/reports/${$('#rp-year').value}?rules_version=${$('#rp-rules').value}`)}catch(_){toast(e.message,true);return}}
+  renderReport(j);
+}
+function renderReport(j){
+  $('#report-meta').innerHTML=`规则版本 <b>${j.rules_version}</b> · 数据范围冻结 ${j.data_range.count} 个活动
+    （${j.data_range.date_attribution==='start_local'?'当地开始日归属':'UTC开始日归属'}），本页所有图引用同一 frozen_activity_ids`;
+  const months=Object.entries(j.monthly);const max=Math.max(1,...months.map(([_,v])=>v.distance_m));
+  $('#rp-chart').innerHTML=months.map(([m,v])=>`<div class="bar-row"><span class="lab">${m.slice(5)}</span>
+    <span class="bar-track"><span class="bar-fill ${v.confirmed_distance_m?'confirmed':''}" style="width:${v.distance_m/max*100}%"></span></span>
+    <span class="val">${fmtKm(v.distance_m)}km / ${v.activities}次</span></div>`).join('')
+    +`<p class="muted">全年训练合计 ${fmtKm(j.training.distance_m)} km · ${fmtDur(j.training.moving_s)} · ${j.training.activities} 次（不含比赛）</p>`;
+  $('#rp-origin').innerHTML=`<div class="bar-row"><span class="lab">设备</span><span class="bar-track"><span class="bar-fill" style="width:${j.training.device_only_activities/Math.max(1,j.training.activities)*100}%"></span></span><span class="val">${j.training.device_only_activities} 次</span></div>
+    <div class="bar-row"><span class="lab">确认</span><span class="bar-track"><span class="bar-fill confirmed" style="width:${j.training.user_confirmed_activities/Math.max(1,j.training.activities)*100}%"></span></span><span class="val">${j.training.user_confirmed_activities} 次</span></div>
+    <p class="muted">页面明确区分设备估算与用户确认；系统不提供训练或治疗建议。</p>`;
+  $('#rp-races').innerHTML=j.races.length?'<table><thead><tr><th>日期</th><th>名称</th><th>距离</th><th>芯片</th><th>名次</th></tr></thead><tbody>'+
+    j.races.map(r=>`<tr><td>${r.date}</td><td>${r.title||''}</td><td>${r.distance_m?fmtKm(r.distance_m):'-'}km</td><td>${r.chip_time_s?fmtDur(r.chip_time_s):'-'}</td><td>${r.overall_rank??'-'}</td></tr>`).join('')+'</tbody></table>'
+    :'<p class="muted">本年无登记比赛</p>';
+}
+async function loadMethod(){
+  const m=await api('/api/methodology');
+  $('#method').textContent=JSON.stringify(m,null,2);
+}
+loadActivities();
+</script>
+</body>
+</html>
