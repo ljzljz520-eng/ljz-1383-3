@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="demo" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>watch-activity-001</name></metadata>
+  <trk>
+    <name>滨江夜跑</name>
+    <trkseg>
+      <trkpt lat="31.230000" lon="121.470000"><time>2026-03-01T11:00:00Z</time></trkpt>
+      <trkpt lat="31.230600" lon="121.470000"><time>2026-03-01T11:00:30Z</time></trkpt>
+      <trkpt lat="31.231200" lon="121.470000"><time>2026-03-01T11:01:00Z</time></trkpt>
+    </trkseg>
+  </tr>
+</gpx>

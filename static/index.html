@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>跑者年报工作台</title>
+  <style>
+    :root{--bg:#f6f7fb;--panel:#fff;--ink:#142033;--muted:#667085;--blue:#2563eb;--green:#16a34a;--orange:#ea580c;--red:#dc2626;--line:#e5e7eb}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+    header{background:#0f172a;color:#fff;padding:20px 28px} header h1{margin:0;font-size:22px}.sub{color:#cbd5e1;margin-top:4px}
+    nav{display:flex;gap:4px;padding:0 20px;background:#1e293b;overflow:auto}nav button{border:0;background:none;color:#cbd5e1;padding:13px 16px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}nav button.active{color:#fff;border-bottom-color:#60a5fa}
+    main{padding:22px;max-width:1220px;margin:auto}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;box-shadow:0 1px 2px #0001}
+    h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;margin:16px 0 8px}.grid{display:grid;grid-template:repeat(auto-fit,minmax(170px,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fafafa}.num{font-size:24px;font-weight:700}.muted{color:var(--muted)}
+    button,.btn{border:1px solid #cbd5e1;background:#fff;color:var(--ink);border-radius:8px;padding:7px 11px;cursor:pointer}button.primary{background:var(--blue);color:white;border-color:var(--blue)}button.danger{color:var(--red);border-color:#fecaca}button.good{color:var(--green);border-color:#bbf7d0}
+    input,select,textarea{border:1px solid #cbd5e1;border-radius:8px;padding:8px;width:100%;background:white}textarea{min-height:74px}label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid var(--line);padding:8px 6px;vertical-align:top}th{font-size:12px;color:#475569;background:#f8fafc}.tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px}.tag.device{background:#ffedd5;color:#9a3412}.tag.user{background:#dcfce7;color:#166534}.tag.gps{background:#e0e7ff;color:#3730a3}.tag.race{background:#fee2e2;color:#991b1b}.tag.dup{background:#e2e8f0;color:#334155}.ok{color:var(--green)}.bad{color:var(--red)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.row>*{flex:1;min-width:130px}.row .auto{flex:0 0 auto}
+    .chart{width:100%;height:230px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(#f8fafc 1px,transparent 1px) 0 0/100% 46px}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#d1fae5;padding:12px;border-radius:10px;max-height:360px;overflow:auto}.notice{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;color:#1e3a8a}.warning{background:#fffbeb;border-color:#fde68a;color:#92400e}.dangerbox{background:#fef2f2;border-color:#fecaca;color:#991b1b}.hidden{display:none}
+    .map svg{width:100%;height:260px;background:#f8fafc;border:1px solid var(--line);border-radius:10px}.map polyline{fill:none;stroke:var(--blue);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+  </style>
+</head>
+<body>
+<header><h1>跑者年报工作台</h1><div class="sub">导入 · 规范化 · 去重订正 · 月份/比赛/故事 · 隐私分享 · 历史规则重生成</div></header>
+<nav id="tabs"></nav>
+<main>
+  <section id="tab-import" class="tab">
+    <div class="panel"><h2>1. 导入训练文件</h2><div class="notice">支持 GPX / TCX / JSON。手表和手机重复上传会比较来源 ID、文件指纹与重叠轨迹；相邻两段真实训练不会仅因时间接近合并。</div>
+      <div class="row" style="margin-top:12px"><div class="auto"><input id="file" type="file" accept=".gpx,.tcx,.json" style="width:auto"></div><div><label>无时区信息时使用的 IANA 时区</label><input id="tz" value="Asia/Shanghai"></div><div class="auto"><button class="primary" onclick="importFile()">上传并规范化</button></div></div>
+      <pre id="importResult" class="hidden"></pre>
+    </div>
+    <div class="panel"><h2>活动与来源身份</h2><div id="activities"></div></div>
+  </section>
+  <section id="tab-stats" class="tab hidden">
+    <div class="panel"><h2>2. 训练统计（同一数据范围）</h2>
+      <div class="row"><div><label>年份</label><input id="statsYear" type="number" value="2026"></div><div><label>开始日期</label><input id="statsStart" placeholder="YYYY-MM-DD"></div><div><label>结束日期</label><input id="statsEnd" placeholder="YYYY-MM-DD"></div><div><label>统计规则</label><select id="statsRule"></select></div><div class="auto"><button class="primary" onclick="loadStats()">应用同一范围</button></div></div>
+      <div class="notice" style="margin-top:10px">下方月度柱状图、状态构成和活动表全部引用本接口返回的同一个 <b>data_range</b>。成绩走“比赛”标签并单独处理。</div>
+      <div id="statsCards" class="grid" style="margin-top:12px"></div><canvas id="monthChart" class="chart" style="margin-top:12px"></canvas>
+      <h3>活动（设备估算 / 用户确认 / GPS测量分别标识）</h3><div id="statsActivities"></div>
+    </div>
+  </section>
+  <section id="tab-races" class="tab hidden">
+    <div class="panel"><h2>3. 比赛成绩</h2><div class="row"><div><label>名称</label><input id="raceName" value="城市 10K"></div><div><label>日期</label><input id="raceDate" type="date"></div><div><label>距离米</label><input id="raceDistance" type="number" value="10000"></div><div><label>秒</label><input id="raceSeconds" type="number"></div><div class="auto"><button class="primary" onclick="addRace()">保存成绩</button></div></div><div id="races" style="margin-top:12px"></div></div>
+    <div class="panel"><h2>个人故事</h2><div class="row"><div><label>日期</label><input id="storyDate" type="date"></div><div><label>标题</label><input id="storyTitle"></div><div><label>心情</label><input id="storyMood" placeholder="兴奋/坚持/感谢"></div></div><label>故事</label><textarea id="storyBody"></textarea><p><button class="primary" onclick="addStory()">保存故事</button></p><div id="stories"></div></div>
+  </section>
+  <section id="tab-duplicates" class="tab hidden"><div class="panel"><h2>4. 重复上传、人工拆分与恢复</h2><div class="warning">自动合并必须有来源身份或时空重叠证据。拆分决定会被保留，点击恢复后才允许重新合并。</div><div id="duplicates" style="margin-top:12px"></div></div></section>
+  <section id="tab-injuries" class="tab hidden">
+    <div class="panel"><h2>5. 伤病字段（私密，不进年报）</h2><div class="dangerbox">本系统仅记录用户选择的私人信息，不生成训练处方，也不提供伤病治疗建议。字段默认私密，公开年报快照中排除。</div>
+    <div class="row" style="margin-top:10px"><div><label>部位</label><input id="injPart"></div><div><label>日期</label><input id="injDate" type="date"></div><div><label>程度</label><select id="injSeverity"><option>mild</option><option>moderate</option><option>severe</option></select></div><div class="auto"><button class="primary" onclick="addInjury()">仅本地保存</button></div></div><label>私人备注</label><textarea id="injNotes"></textarea><div id="injuries" style="margin-top:10px"></div></div>
+  </section>
+  <section id="tab-reports" class="tab hidden"><div class="panel"><h2>6. 年度报告</h2><div class="row"><div><label>年份</label><input id="reportYear" type="number" value="2026"></div><div><label>规则版本</label><select id="reportRule"></select></div><div><label>状态</label><select id="reportStatus"><option value="draft">草稿</option><option value="published">发布</option></select></div><div class="auto"><button class="primary" onclick="createReport()">生成快照</button></div></div><div id="reports" style="margin-top:12px"></div><pre id="reportSnapshot" class="hidden"></pre></div></section>
+  <section id="tab-share" class="tab hidden"><div class="panel"><h2>7. 隐私分享与泄漏检查</h2><div class="row"><div><label>活动 ID</label><input id="shareActivity" type="number"></div><div><label>住址纬度</label><input id="homeLat" placeholder="如 31.2304"></div><div><label>住址经度</label><input id="homeLon" placeholder="如 121.4737"></div><div><label>半径米</label><input id="homeRadius" type="number" value="150"></div><div class="auto"><button class="primary" onclick="createShare()">创建分享</button></div></div><p class="muted">系统会先删除半径内点，再生成公开 JSON、SVG 缩略图和 GPX 下载，并检查聚合入口是否含坐标/伤病。</p><div id="shareResult"></div></div></section>
+  <section id="tab-method" class="tab hidden"><div class="panel"><h2>8. 公开口径</h2><div id="method"></div></div></section>
+</main>
+<script src="/static/app.js"></script>
+</body></html>
